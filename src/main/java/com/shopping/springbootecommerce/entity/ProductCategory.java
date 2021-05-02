@@ -7,7 +7,7 @@ import javax.persistence.*;
 import java.util.Set;
 
 @Entity
-@Table(name="product_category")
+@Table(name="product_category", schema = "full-stack-ecommerce")
 @Getter
 @Setter
 public class ProductCategory {
