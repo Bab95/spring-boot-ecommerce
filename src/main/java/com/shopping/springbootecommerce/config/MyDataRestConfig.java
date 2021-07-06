@@ -27,5 +27,6 @@ public class MyDataRestConfig implements RepositoryRestConfigurer {
         // Commment to verify the GIT checkout of commit and changing.......
         //commit 1
         //commit 2
+        // commit 3
     }
 }
