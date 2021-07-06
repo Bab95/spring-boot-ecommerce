@@ -24,9 +24,5 @@ public class MyDataRestConfig implements RepositoryRestConfigurer {
                 .forDomainType(ProductCategory.class)
                 .withItemExposure((metdata, httpMethods) -> httpMethods.disable(unSupportedActions))
                 .withCollectionExposure(((metdata, httpMethods) -> httpMethods.disable(unSupportedActions)));
-        // Commment to verify the GIT checkout of commit and changing.......
-        //commit 1
-        //commit 2
-        // commit 3
     }
 }
