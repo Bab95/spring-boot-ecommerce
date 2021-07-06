@@ -76,6 +76,7 @@ extends:
                   }
                   catch
                   {
+                    # adding some more commits
                     Write-Host "Unable to get Changes Paths!"
                     Write-Host "Build Failed!!!"
                     exit 1
