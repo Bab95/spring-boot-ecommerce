@@ -8,5 +8,4 @@ import org.springframework.web.bind.annotation.CrossOrigin;
 @CrossOrigin("http://localhost:4200")
 @RepositoryRestResource(collectionResourceRel = "products", path = "product")
 public interface ProductRepository extends JpaRepository<Product, Long> {
-    // git commit 5
 }
