@@ -6,7 +6,6 @@ trigger:
   paths:
     include:
       - /src
-      - /CodeGen
 
 variables:
   CDP_DEFINITION_BUILD_COUNT: $[counter('', 0)]
@@ -30,65 +29,7 @@ extends:
     stages:
       - stage: build
         jobs:
-          - job: GetChanges
-            pool:
-              type: windows
-
-            steps:
-              - powershell: |
-                  [string]$AuthPat = $env:SYSTEM_ACCESSTOKEN
-                  if ([string]::IsNullOrWhitespace($AuthPat))
-                  {
-                    Write-Host "AuthPat not found!"
-                    throw "'AuthPat' is empty! SYSTEM_ACCESSTOKEN is not defined"
-                  }
-                  $url = "https://dev.azure.com/msazure/One/_apis/git/repositories/Azure-Ev2Compiler/commits/$(Build.SourceVersion)/changes?api-version=5.1"
-                  try
-                  {
-                    $header = @{
-                      Authorization=("Basic" + [System.Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes(":$AuthPat")));
-                      ContentType="application/json"
-                    }
-                    $JSONResponse = Invoke-webRequest -Uri $url -Headers $header -Method GET
-                    $StatusCode = $JSONResponse.StatusCode
-                    if($StatusCode -ne 200)
-                    {
-                      Write-Host "Unable to Get changes! ExitCode = ${$StatusCode}"
-                    }
-                    $ChangesObject = ConvertFrom-JSON -InputObject $JSONResponse
-                    $ChangesPaths = $ChangesObject.changes | Where-Object { $_.item.gitObjectType -match "tree" } | Select-Object -Property { $_.item.Path }
-                    foreach($path in $ChangesPaths)
-                    {
-                      if($path -match '/src')
-                      {
-                        Write-Host "##vso[task.setvariable variable=Ev2CompilerUpdated;isOutput=true]true"
-                        break
-                      }
-                    }
-                    foreach($path in $ChangesPaths)
-                    {
-                      if($path -match '/CodeGen')
-                      {
-                        Write-Host "##vso[task.setvariable variable=CodeGenUpdated;isOutput=true]true"
-                      break
-                      }
-                    }
-                  }
-                  catch
-                  {
-                    # adding some more commits
-                    Write-Host "Unable to get Changes Paths!"
-                    Write-Host "Build Failed!!!"
-                    exit 1
-                  }
-                name: Solution
-                displayName: GetChanges
-                env:
-                  SYSTEM_ACCESSTOKEN: $(System.AccessToken)
-
           - job: build
-            dependsOn: GetChanges
-            condition: and(succeeded(), eq(dependencies.GetChanges.outputs['Solution.Ev2CompilerUpdated'], 'true'))
             pool:
               type: windows
             variables:
@@ -115,14 +56,13 @@ extends:
                 displayName: restore
                 inputs:
                   filePath: ./.build/restore.ps1
-                  arguments: 'Ev2Compiler'
                   failOnStderr: true
 
               - task: PowerShell@2
                 displayName: build
                 inputs:
                   filePath: ./.build/build.ps1
-                  arguments: '-SkipRestore Ev2Compiler'
+                  arguments: '-SkipRestore'
                   failOnStderr: true
 
               - task: PowerShell@2
@@ -150,7 +90,7 @@ extends:
                 displayName: pack
                 inputs:
                   filePath: ./.build/pack.ps1
-                  arguments: '-SkipBuild Ev2Compiler'
+                  arguments: '-SkipBuild'
                   failOnStderr: true
 
               - task: PowerShell@2
@@ -159,95 +99,4 @@ extends:
                   targetType: 'inline'
                   script: |
                     copy -Path "$(Build.SourcesDirectory)/src" -Destination "$(Build.SourcesDirectory)/out/packages/" -Filter *.nupkg -Recurse
-                  failOnStderr: true
-
-          - job: BuildCodeGen
-            dependsOn: GetChanges
-            condition: and(succeeded(), eq(dependencies.GetChanges.outputs['Solution.CodeGenUpdated'], 'true'))
-            pool:
-              type: windows
-            variables:
-              ob_outputDirectory: '$(Build.SourcesDirectory)/out'
-              ob_sdl_binskim_scanOutputDirectoryOnly: true
-              ob_sdl_sdtReport_enabled: false
-              ob_sdl_publishLogs_enabled: false
-              ob_sdl_codeSignValidation_excludes: -:file|**\*.nupkg*\**
-              ${{ if eq(variables['Build.SourceBranchName'], 'master') }}:
-                ob_nugetPublishing_enabled: true
-              ob_symbolsPublishing_enabled: false
-              ob_symbolsPublishing_searchPattern: "$(Build.SourcesDirectory)/CodeGen/**/*.pdb"
-
-            steps:
-              - task: onebranch.pipeline.version@1
-                inputs:
-                  system: 'RevisionCounter'
-                  major: '1'
-                  minor: '0'
-
-              - task: NuGetAuthenticate@0
-
-              - task: PowerShell@2
-                displayName: restore
-                inputs:
-                  filePath: ./.build/restore.ps1
-                  arguments: 'CodeGen'
-                  failOnStderr: true
-
-              - task: PowerShell@2
-                displayName: build
-                inputs:
-                  filePath: ./.build/build.ps1
-                  arguments: '-SkipRestore CodeGen'
-                  failOnStderr: true
-
-              - task: PowerShell@2
-                displayName: Collect Dll
-                inputs:
-                  targetType: 'inline'
-                  script: |
-                    [string]$CodeGenPath = [IO.Path]::Combine('$(Build.SourcesDirectory)', 'CodeGen')
-                    $SubDirectories = Get-ChildItem -Path $CodeGenPath -Attributes Directory
-                    [string]$DLLPath = [IO.Path]::Combine('$(Build.SourcesDirectory)', 'CodeGenDlls')
-                    [string]$dllNetstandard2_0 = [IO.Path]::Combine($DLLPath, 'netstandard2.0')
-                    [string]$dllNetstandard2_1 = [IO.Path]::Combine($DLLPath, 'netstandard2.1')
-                    New-Item -Path $DLLPath -ItemType Directory -Force
-                    New-Item -Path $dllNetstandard2_0 -ItemType Directory -Force
-                    New-Item -Path $dllNetstandard2_1 -ItemType Directory -Force
-                    foreach($path in $SubDirectories)
-                    {
-                      [string]$source2_0 = [IO.Path]::Combine($CodeGenPath, $path, 'bin/Release/netstandard2.0')
-                      [string]$source2_1 = [IO.Path]::Combine($CodeGenPath, $path, 'bin/Release/netstandard2.1')
-
-                      Copy-Item -Path $source2_0/* -Destination $dllNetstandard2_0 -Filter *.dll
-                      Copy-Item -Path $source2_0/* -Destination $dllNetstandard2_0 -Filter *.pdb
-                      Copy-Item -Path $source2_0/* -Destination $dllNetstandard2_0 -Filter *.xml
-
-                      Copy-Item -Path $source2_1/* -Destination $dllNetstandard2_1 -Filter *.dll
-                      Copy-Item -Path $source2_1/* -Destination $dllNetstandard2_1 -Filter *.pdb
-                      Copy-Item -Path $source2_1/* -Destination $dllNetstandard2_1 -Filter *.xml
-                    }
-
-              - task: PowerShell@2
-                displayName: Pack CodeGen
-                inputs:
-                  targetType: 'inline'
-                  script: |
-                    [string]$pathToNuspec = [IO.Path]::Combine('$(Build.SourcesDirectory)', 'CodeGen\Package.nuspec')
-                    [xml]$Package_Nuspec =  Get-Content $pathToNuspec
-                    $PackageVersion = $env:CDP_FILE_VERSION_NUMERIC_NOLEADINGZEROS
-                    if(!$PackageVersion)
-                    {
-                      Write-Host "Packing with default package version"
-                      $PackageVersion = "1.0.0.0"
-                    }
-                    $Package_Nuspec.package.metadata.version = $PackageVersion
-                    $Package_Nuspec.Save($pathToNuspec)
-                    nuget pack $pathToNuspec
-
-              - task: PowerShell@2
-                displayName: publish CodeGen
-                inputs:
-                  targetType: 'inline'
-                  script: |
-                    copy -Path "$(Build.SourcesDirectory)/CodeGen" -Destination "$(Build.SourcesDirectory)/out/packages/" -Filter *.nupkg -Recurse
                   failOnStderr: true
