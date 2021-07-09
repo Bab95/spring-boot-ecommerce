@@ -6,4 +6,5 @@ import org.springframework.data.rest.core.annotation.RepositoryRestResource;
 public interface ProductCategoryRepository <ProductCategory, Long>{
     // Nothing just testing something....
     //changin this file in dev branch
+    //test commit 2
 }
