@@ -4,5 +4,5 @@ import org.springframework.data.rest.core.annotation.RepositoryRestResource;
 
 @RepositoryRestResource(collectionResourceRel = "productCategory", path = "product-category")
 public interface ProductCategoryRepository <ProductCategory, Long>{
-    //test commit 2
+    // Nothing just testing something....
 }
